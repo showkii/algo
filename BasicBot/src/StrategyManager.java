@@ -21,6 +21,12 @@ public class StrategyManager {
 
 	private boolean isFullScaleAttackStarted;
 	private boolean isInitialBuildOrderFinished;
+	
+	
+	
+	//2017-07-11 Added.by yong.
+	private int curAttackCount=0;
+	private int curConstructionStep=0;
 
 	/// static singleton 객체를 리턴합니다
 	public static StrategyManager Instance() {
@@ -53,8 +59,29 @@ public class StrategyManager {
 		executeSupplyManagement();
 
 		executeBasicCombatUnitTraining();
+		
+		executeAdvancedConstructorManagement();
+		
+		executeAdvancedCombatUnitTraining();
 
 		executeCombat();
+	}
+
+	private void executeAdvancedConstructorManagement() {
+		// TODO Auto-generated method stub
+		//1차 러시가 하지 않고, 질럿이 4기 모이면 수행
+		if(curAttackCount == 0 && MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) < 4){
+			return;
+		}
+		if(curConstructionStep==0){
+			if(MyBotModule.Broodwar.self().completedUnitCount(UnitType.Protoss_Cybernetics_Core) == 0){
+				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Cybernetics_Core,
+						BuildOrderItem.SeedPositionStrategy.MainBaseLocation);
+				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Assimilator,
+						BuildOrderItem.SeedPositionStrategy.MainBaseLocation);
+			}
+				curConstructionStep++;
+		}
 	}
 
 	public void setInitialBuildOrder() {
@@ -76,7 +103,12 @@ public class StrategyManager {
 					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
 			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Zealot,
 					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
-
+			
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Gateway,
+					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+			
+			
+			
 			/*
 			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Assimilator,
 					BuildOrderItem.SeedPositionStrategy.MainBaseLocation);
@@ -626,8 +658,9 @@ public class StrategyManager {
 		}
 
 		// 기본 병력 추가 훈련
-		if (MyBotModule.Broodwar.self().minerals() >= 200 && MyBotModule.Broodwar.self().supplyUsed() < 390) {
+		if (MyBotModule.Broodwar.self().minerals() >= 150 && MyBotModule.Broodwar.self().supplyUsed() < 390) {
 			for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
+						
 				if (unit.getType() == InformationManager.Instance().getBasicCombatBuildingType()) {
 					if (unit.isTraining() == false || unit.getLarva().size() > 0) {
 						if (BuildManager.Instance().buildQueue
@@ -641,70 +674,129 @@ public class StrategyManager {
 			}
 		}
 	}
+	
+	public void executeAdvancedCombatUnitTraining() {
+
+		// InitialBuildOrder 진행중에는 아무것도 하지 않습니다
+		if (isInitialBuildOrderFinished == false) {
+			return;
+		}
+		
+		//최초 러시 이후에수행
+		if(curAttackCount == 0){
+			return;
+		}
+
+		// 드라군 병력 추가 훈련
+		if (MyBotModule.Broodwar.self().minerals() >= 150 && MyBotModule.Broodwar.self().supplyUsed() < 390) {
+			if (BuildManager.Instance().buildQueue
+							.getItemCount(InformationManager.Instance().getAdvancedCombatUnitType(), null) <= 5 ) {
+						BuildManager.Instance().buildQueue.queueAsLowestPriority(
+								InformationManager.Instance().getAdvancedCombatUnitType(),
+								BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+			}
+			
+		}
+	}
+
 
 	public void executeCombat() {
 
 		// 공격 모드가 아닐 때에는 전투유닛들을 아군 진영 길목에 집결시켜서 방어
-		if (isFullScaleAttackStarted == false) {
-			Chokepoint firstChokePoint = BWTA.getNearestChokepoint(InformationManager.Instance().getMainBaseLocation(InformationManager.Instance().selfPlayer).getTilePosition());
-
-			for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
-				if (unit.getType() == InformationManager.Instance().getBasicCombatUnitType() && unit.isIdle()) {
-					commandUtil.attackMove(unit, firstChokePoint.getCenter());
-				}
-			}
-
-			// 전투 유닛이 2개 이상 생산되었고, 적군 위치가 파악되었으면 총공격 모드로 전환
-			if (MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) > 2) {
-				if (InformationManager.Instance().enemyPlayer != null
-					&& InformationManager.Instance().enemyRace != Race.Unknown  
-					&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) {				
-					isFullScaleAttackStarted = true;
-				}
-			}
-		}
-		// 공격 모드가 되면, 모든 전투유닛들을 적군 Main BaseLocation 로 공격 가도록 합니다
-		else {
-			//std.cout << "enemy OccupiedBaseLocations : " << InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance()._enemy).size() << std.endl;
+		//if (isFullScaleAttackStarted == false) {
 			
-			if (InformationManager.Instance().enemyPlayer != null
-					&& InformationManager.Instance().enemyRace != Race.Unknown 
-					&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) 
-			{					
-				// 공격 대상 지역 결정
-				BaseLocation targetBaseLocation = null;
-				double closestDistance = 100000000;
 
-				for (BaseLocation baseLocation : InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer)) {
-					double distance = BWTA.getGroundDistance(
-						InformationManager.Instance().getMainBaseLocation(InformationManager.Instance().selfPlayer).getTilePosition(), 
-						baseLocation.getTilePosition());
+			//최초 러시(질럿 6기 러시)
+			if(curAttackCount>=0){
+				// 기본 전투 유닛이 6개 이상 생산되었고, 적군 위치가 파악되었으면 총공격 모드로 전환
+				if (MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) > 1) {
+					if (InformationManager.Instance().enemyPlayer != null
+						&& InformationManager.Instance().enemyRace != Race.Unknown  
+						&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) {				
+						//isFullScaleAttackStarted = true;
+						curAttackCount++;
+						totalAttack();
+					}
+				}else{
+					Chokepoint firstChokePoint = BWTA.getNearestChokepoint(InformationManager.Instance().getMainBaseLocation(InformationManager.Instance().selfPlayer).getTilePosition());
 
-					if (distance < closestDistance) {
-						closestDistance = distance;
-						targetBaseLocation = baseLocation;
+					for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
+						if (unit.getType() == InformationManager.Instance().getBasicCombatUnitType() && unit.isIdle()) {
+							commandUtil.attackMove(unit, firstChokePoint.getCenter());
+						}
 					}
 				}
-
-				if (targetBaseLocation != null) {
-					for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
-						// 건물은 제외
-						if (unit.getType().isBuilding()) {
-							continue;
-						}
-						// 모든 일꾼은 제외
-						if (unit.getType().isWorker()) {
-							continue;
-						}
-											
-						// canAttack 유닛은 attackMove Command 로 공격을 보냅니다
-						if (unit.canAttack()) {
-							
-							if (unit.isIdle()) {
-								commandUtil.attackMove(unit, targetBaseLocation.getPosition());
-							}
-						} 
+			}
+			else{
+				//드라군 5기 이상 되면 공격
+				if (MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getAdvancedCombatUnitType()) > 5) {
+					if (InformationManager.Instance().enemyPlayer != null
+						&& InformationManager.Instance().enemyRace != Race.Unknown  
+						&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) {				
+						//isFullScaleAttackStarted = true;
+						curAttackCount++;
+						totalAttack();
 					}
+				}else{
+					Chokepoint firstChokePoint = BWTA.getNearestChokepoint(InformationManager.Instance().getMainBaseLocation(InformationManager.Instance().selfPlayer).getTilePosition());
+
+					for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
+						if ((unit.getType() == InformationManager.Instance().getAdvancedCombatUnitType()
+								|| unit.getType() == InformationManager.Instance().getBasicCombatUnitType())
+								&& unit.isIdle()) {
+							commandUtil.attackMove(unit, firstChokePoint.getCenter());
+						}
+					}
+				}
+			}
+		//}
+		// 공격 모드가 되면, 모든 전투유닛들을 적군 Main BaseLocation 로 공격 가도록 합니다
+		//else {
+		//	totalAttack();
+		//}
+	}
+	
+	//총 공격
+	private void totalAttack(){
+		//std.cout << "enemy OccupiedBaseLocations : " << InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance()._enemy).size() << std.endl;
+		
+		if (InformationManager.Instance().enemyPlayer != null
+				&& InformationManager.Instance().enemyRace != Race.Unknown 
+				&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) 
+		{					
+			// 공격 대상 지역 결정
+			BaseLocation targetBaseLocation = null;
+			double closestDistance = 100000000;
+
+			for (BaseLocation baseLocation : InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer)) {
+				double distance = BWTA.getGroundDistance(
+					InformationManager.Instance().getMainBaseLocation(InformationManager.Instance().selfPlayer).getTilePosition(), 
+					baseLocation.getTilePosition());
+
+				if (distance < closestDistance) {
+					closestDistance = distance;
+					targetBaseLocation = baseLocation;
+				}
+			}
+
+			if (targetBaseLocation != null) {
+				for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
+					// 건물은 제외
+					if (unit.getType().isBuilding()) {
+						continue;
+					}
+					// 모든 일꾼은 제외
+					if (unit.getType().isWorker()) {
+						continue;
+					}
+										
+					// canAttack 유닛은 attackMove Command 로 공격을 보냅니다
+					if (unit.canAttack()) {
+						
+						if (unit.isIdle()) {
+							commandUtil.attackMove(unit, targetBaseLocation.getPosition());
+						}
+					} 
 				}
 			}
 		}

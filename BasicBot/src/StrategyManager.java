@@ -1,3 +1,7 @@
+import java.awt.SecondaryLoop;
+import java.util.ArrayList;
+import java.util.HashMap;
+
 import bwapi.Race;
 import bwapi.TechType;
 import bwapi.TilePosition;
@@ -25,8 +29,17 @@ public class StrategyManager {
 	
 	
 	//2017-07-11 Added.by yong.
-	private int curAttackCount=0;
-	private int curConstructionStep=0;
+	private int curStrategyStep;
+	private int curConstructionStep;
+	//2017-07-14 Added.by yong.
+	private HashMap<Integer, Integer> attackingGroup ;
+	
+	//2017-07-19 Added.by hoon.
+	private final int BASIC_STEP = 0;
+	private final int ADVAN_STEP = 1;
+	private final int MULTI_STEP = 2;
+	private final int PRO_STEP = 3;
+	
 
 	/// static singleton 객체를 리턴합니다
 	public static StrategyManager Instance() {
@@ -36,6 +49,10 @@ public class StrategyManager {
 	public StrategyManager() {
 		isFullScaleAttackStarted = false;
 		isInitialBuildOrderFinished = false;
+		
+		curStrategyStep=0;
+		curConstructionStep=0;
+		attackingGroup = new HashMap<>();	//공격유닛의 부대 지정, 기준은 curStrategyStep
 	}
 
 	/// 경기가 시작될 때 일회적으로 전략 초기 세팅 관련 로직을 실행합니다
@@ -58,29 +75,95 @@ public class StrategyManager {
 
 		executeSupplyManagement();
 
-		executeBasicCombatUnitTraining();
-		
-		executeAdvancedConstructorManagement();
-		
-		executeAdvancedCombatUnitTraining();
+		switch(curStrategyStep)
+		{
+			case BASIC_STEP:
+				executeBasicCombatUnitTraining();
+				
+				executeCombat();
+				
+				break;
+			case ADVAN_STEP:
+				executeAdvancedConstructorManagement();
+				
+				executeAdvancedCombatUnitTraining();
 
-		executeCombat();
+				executeCombat();
+				
+				break;
+			case MULTI_STEP:
+				executeMultiConstructorManagement();
+				executeAdvancedCombatUnitTraining();
+				
+				executeCombat();
+				break;
+		}
 	}
 
 	private void executeAdvancedConstructorManagement() {
 		// TODO Auto-generated method stub
 		//1차 러시가 하지 않고, 질럿이 4기 모이면 수행
-		if(curAttackCount == 0 && MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) < 4){
+		//if(curAttackCount == 0 && MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) < 4){
+		if(curStrategyStep!=ADVAN_STEP) {
 			return;
 		}
-		if(curConstructionStep==0){
+		
+		//건설 flag 는 전략 flag 와 별도로 관리됨(딱 한 번 수행)
+		if(curConstructionStep==BASIC_STEP){
 			if(MyBotModule.Broodwar.self().completedUnitCount(UnitType.Protoss_Cybernetics_Core) == 0){
 				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Cybernetics_Core,
 						BuildOrderItem.SeedPositionStrategy.MainBaseLocation);
 				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Assimilator,
 						BuildOrderItem.SeedPositionStrategy.MainBaseLocation);
+				
+				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Zealot,
+						BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Zealot,
+						BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+				
+				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Gateway,
+						BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+				
 			}
-				curConstructionStep++;
+				curConstructionStep=ADVAN_STEP;
+		}
+	}
+	
+	private void executeMultiConstructorManagement() {
+		// TODO Auto-generated method stub
+		//if(curAttackCount == 0 && MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) < 4){
+		if(curStrategyStep!=MULTI_STEP) {
+			return;
+		}
+	
+		if(curConstructionStep==ADVAN_STEP){
+			
+			//앞마당 멀티
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Nexus,
+					BuildOrderItem.SeedPositionStrategy.FirstExpansionLocation);
+			//로보틱스 퍼실리티(옵저버용)
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Robotics_Facility,
+					BuildOrderItem.SeedPositionStrategy.MainBaseLocation);
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Observatory);
+			//업그레이드
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Forge,
+					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Gateway,
+					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+			//드라군 사업
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UpgradeType.Singularity_Charge);
+			//공업
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UpgradeType.Protoss_Ground_Weapons);
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Observer);
+				
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Zealot,
+					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Zealot,
+					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Zealot,
+					BuildOrderItem.SeedPositionStrategy.MainBaseLocation, true);
+			
+			curConstructionStep=MULTI_STEP;
 		}
 	}
 
@@ -658,9 +741,8 @@ public class StrategyManager {
 		}
 
 		// 기본 병력 추가 훈련
-		if (MyBotModule.Broodwar.self().minerals() >= 150 && MyBotModule.Broodwar.self().supplyUsed() < 390) {
+		if (MyBotModule.Broodwar.self().minerals() >= 130 && MyBotModule.Broodwar.self().supplyUsed() < 390) {
 			for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
-						
 				if (unit.getType() == InformationManager.Instance().getBasicCombatBuildingType()) {
 					if (unit.isTraining() == false || unit.getLarva().size() > 0) {
 						if (BuildManager.Instance().buildQueue
@@ -683,7 +765,7 @@ public class StrategyManager {
 		}
 		
 		//최초 러시 이후에수행
-		if(curAttackCount == 0){
+		if(curStrategyStep == BASIC_STEP){
 			return;
 		}
 
@@ -707,15 +789,16 @@ public class StrategyManager {
 			
 
 			//최초 러시(질럿 6기 러시)
-			if(curAttackCount>=0){
-				// 기본 전투 유닛이 6개 이상 생산되었고, 적군 위치가 파악되었으면 총공격 모드로 전환
-				if (MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) > 1) {
+			if(curStrategyStep ==BASIC_STEP){
+				// 기본 전투 유닛이 5개 이상 생산되었고, 적군 위치가 파악되었으면 총공격 모드로 전환
+				if (MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getBasicCombatUnitType()) > 5) {
 					if (InformationManager.Instance().enemyPlayer != null
 						&& InformationManager.Instance().enemyRace != Race.Unknown  
 						&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) {				
 						//isFullScaleAttackStarted = true;
-						curAttackCount++;
-						totalAttack();
+						System.out.println("BASIC_STEP totalAttack called");
+						totalAttack();						
+						curStrategyStep=ADVAN_STEP;
 					}
 				}else{
 					Chokepoint firstChokePoint = BWTA.getNearestChokepoint(InformationManager.Instance().getMainBaseLocation(InformationManager.Instance().selfPlayer).getTilePosition());
@@ -726,29 +809,71 @@ public class StrategyManager {
 						}
 					}
 				}
-			}
-			else{
+			}else if(curStrategyStep == ADVAN_STEP){
+				
 				//드라군 5기 이상 되면 공격
 				if (MyBotModule.Broodwar.self().completedUnitCount(InformationManager.Instance().getAdvancedCombatUnitType()) > 5) {
 					if (InformationManager.Instance().enemyPlayer != null
 						&& InformationManager.Instance().enemyRace != Race.Unknown  
 						&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) {				
 						//isFullScaleAttackStarted = true;
-						curAttackCount++;
+						System.out.println("ADVAN_STEP totalAttack called");
 						totalAttack();
+						curStrategyStep=MULTI_STEP;
 					}
-				}else{
-					Chokepoint firstChokePoint = BWTA.getNearestChokepoint(InformationManager.Instance().getMainBaseLocation(InformationManager.Instance().selfPlayer).getTilePosition());
+				}
+				else{
+					Chokepoint secondChokePoint = InformationManager.Instance().getSecondChokePoint(InformationManager.Instance().selfPlayer);
 
 					for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
+						
+						//System.out.println("##Unit id : " + unit.getID());
+						
 						if ((unit.getType() == InformationManager.Instance().getAdvancedCombatUnitType()
 								|| unit.getType() == InformationManager.Instance().getBasicCombatUnitType())
-								&& unit.isIdle()) {
-							commandUtil.attackMove(unit, firstChokePoint.getCenter());
+								//&& !unit.isAttacking()) 
+								&& (!attackingGroup.containsKey(unit.getID()))
+								){
+							commandUtil.attackMove(unit,  secondChokePoint.getCenter());
 						}
 					}
 				}
+				
+			}else if(curStrategyStep == MULTI_STEP){
+				
+				//옵저버가 있을 것
+				//드라군 사업이 될 것 UpgradeType.Singularity_Charge
+				if (MyBotModule.Broodwar.self().completedUnitCount(UnitType.Protoss_Observer) > 1
+						&& MyBotModule.Broodwar.self().getUpgradeLevel(UpgradeType.Singularity_Charge)>0) {
+					if (InformationManager.Instance().enemyPlayer != null
+						&& InformationManager.Instance().enemyRace != Race.Unknown  
+						&& InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance().enemyPlayer).size() > 0) {				
+						//isFullScaleAttackStarted = true;
+						System.out.println("MULTI_STEP totalAttack called");
+						totalAttack();
+						curStrategyStep=PRO_STEP;
+					}
+				}
+				else{
+					Chokepoint secondChokePoint = InformationManager.Instance().getSecondChokePoint(InformationManager.Instance().selfPlayer);
+
+					for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
+						
+						//System.out.println("##Unit id : " + unit.getID());
+						
+						if ((unit.getType() == InformationManager.Instance().getAdvancedCombatUnitType()
+								|| unit.getType() == InformationManager.Instance().getBasicCombatUnitType()
+								|| unit.getType() == UnitType.Protoss_Observer)
+								//&& !unit.isAttacking()) 
+								&& (!attackingGroup.containsKey(unit.getID()))
+								){
+							commandUtil.attackMove(unit,  secondChokePoint.getCenter());
+						}
+					}
+				}
+				
 			}
+
 		//}
 		// 공격 모드가 되면, 모든 전투유닛들을 적군 Main BaseLocation 로 공격 가도록 합니다
 		//else {
@@ -756,8 +881,11 @@ public class StrategyManager {
 		//}
 	}
 	
+	
+	
+	
 	//총 공격
-	private void totalAttack(){
+	private void totalAttack() {
 		//std.cout << "enemy OccupiedBaseLocations : " << InformationManager.Instance().getOccupiedBaseLocations(InformationManager.Instance()._enemy).size() << std.endl;
 		
 		if (InformationManager.Instance().enemyPlayer != null
@@ -778,8 +906,11 @@ public class StrategyManager {
 					targetBaseLocation = baseLocation;
 				}
 			}
-
+			//적의 앞마당 멀티 위치
+			BaseLocation enemyFirstExpansionLocation = InformationManager.Instance().getFirstExpansionLocation(InformationManager.Instance().enemyPlayer);
+			
 			if (targetBaseLocation != null) {
+				
 				for (Unit unit : MyBotModule.Broodwar.self().getUnits()) {
 					// 건물은 제외
 					if (unit.getType().isBuilding()) {
@@ -791,13 +922,47 @@ public class StrategyManager {
 					}
 										
 					// canAttack 유닛은 attackMove Command 로 공격을 보냅니다
-					if (unit.canAttack()) {
+					if (unit.canAttack() || unit.getType() == UnitType.Protoss_Observer) {
 						
 						if (unit.isIdle()) {
-							commandUtil.attackMove(unit, targetBaseLocation.getPosition());
+							
+							Unit leadingUnit = null;
+							
+							switch (curStrategyStep) {
+							case BASIC_STEP:
+								commandUtil.attackMove(unit , enemyFirstExpansionLocation.getPosition());
+								break;
+							case ADVAN_STEP:
+								
+								/*if(unit.getType() == UnitType.Protoss_Zealot && leadingUnit == null){
+									leadingUnit = unit;
+								}
+								commandUtil.attackMove(unit , enemyFirstExpansionLocation.getPosition());
+								
+								if(unit.getType() == UnitType.Protoss_Dragoon && leadingUnit != null){
+									unit.follow(leadingUnit);
+								}*/
+								
+								commandUtil.attackMove(unit , enemyFirstExpansionLocation.getPosition());
+								
+								break;
+							case MULTI_STEP:
+								commandUtil.attackMove(unit , enemyFirstExpansionLocation.getPosition());
+								
+								break;
+							default:
+								commandUtil.attackMove(unit , targetBaseLocation.getPosition());
+								break;
+							}
+							//commandUtil.attackMove(unit , targetBaseLocation.getPosition());
+							
+							attackingGroup.put(unit.getID(), curStrategyStep);
+							//System.out.println("#Unit id : " + unit.getID());
+							
 						}
 					} 
 				}
+				
 			}
 		}
 	}

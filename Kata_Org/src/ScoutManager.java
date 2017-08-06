@@ -55,7 +55,8 @@ public class ScoutManager {
 	{
 		BaseLocation enemyBaseLocation = InformationManager.Instance().getMainBaseLocation(MyBotModule.Broodwar.enemy());
 
-		if (enemyBaseLocation == null)
+		//if (enemyBaseLocation == null)
+		
 		{
 			if (currentScoutUnit == null || currentScoutUnit.exists() == false || currentScoutUnit.getHitPoints() <= 0)
 			{

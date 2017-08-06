@@ -3,6 +3,9 @@ import bwapi.Position;
 import bwapi.TilePosition;
 import bwapi.Unit;
 import bwapi.UnitType;
+import bwapi.UpgradeType;
+import bwta.BWTA;
+import bwta.BaseLocation;
 
 /// 실제 봇프로그램의 본체가 되는 class<br>
 /// 스타크래프트 경기 도중 발생하는 이벤트들이 적절하게 처리되도록 해당 Manager 객체에게 이벤트를 전달하는 관리자 Controller 역할을 합니다
@@ -80,33 +83,8 @@ public class GameCommander {
 	public void onUnitCreate(Unit unit) { 
 		InformationManager.Instance().onUnitCreate(unit);
 		
-		//20170802 added
-		//Nexus 가 완성되면 일꾼을 자원에 할당 한다.
-		
-		if(unit.getType() == UnitType.Protoss_Nexus){
-			
-			WorkerManager.Instance().rebalanceWorkers();
-/*
-			CommandUtil commandUtil = new CommandUtil();
-			int curWorkerCnt = InformationManager.Instance().getNumUnits(UnitType.Protoss_Probe, InformationManager.Instance().selfPlayer);
-			curWorkerCnt /= 2;
-			for (Unit curUnit : MyBotModule.Broodwar.self().getUnits()) {
-				// 모든 일꾼만
-				if (curUnit.getType().isWorker()) {
-					if(curUnit.isIdle()){
-						commandUtil.
-					}
-					|| unit.isGatheringMinerals()){
-					}
-				}
-				else
-				{
-					continue;
-				}
-		}
-			
-*/		}
 	}
+	
 
 	///  유닛(건물/지상유닛/공중유닛)이 Destroy 될 때 발생하는 이벤트를 처리합니다
 	public void onUnitDestroy(Unit unit) {
@@ -145,6 +123,61 @@ public class GameCommander {
 	{
 		InformationManager.Instance().onUnitComplete(unit);
 
+		//20170802 added
+		//Nexus 가 완성되면 일꾼을 자원에 할당 한다.
+		
+		if(unit.getType() == UnitType.Protoss_Cybernetics_Core){
+			//사업
+			BuildManager.Instance().buildQueue.queueAsLowestPriority(UpgradeType.Singularity_Charge);
+		}
+		
+			
+		//멀티가 완성되었을 경우 가스 건물 지음
+		if(unit.getType() == UnitType.Protoss_Nexus){
+			
+			double distance = BWTA.getGroundDistance(
+					unit.getTilePosition(), 
+					InformationManager.Instance().getFirstExpansionLocation(InformationManager.Instance().selfPlayer).getTilePosition());
+			
+			if(distance < 1000){			
+				BuildManager.Instance().buildQueue.queueAsLowestPriority(UnitType.Protoss_Assimilator,
+					BuildOrderItem.SeedPositionStrategy.FirstExpansionLocation , true);
+			}
+		}
+		
+		//if(unit.getType() == UnitType.Protoss_Dragoon && unit.getRemainingBuildTime() <= 0){
+		if(unit.getType() == UnitType.Protoss_Dragoon ){
+			
+			CommandUtil commandUtil = new CommandUtil();
+			
+			//드라군이 탄생하면 자신의 가장 가까운 질럿을 따라다니도록 한다. 
+			Unit nearZealot = commandUtil.GetClosestUnitTypeToTarget(UnitType.Protoss_Zealot, unit.getPosition());
+			if(nearZealot != null){
+				//commandUtil.rightClick(unit, nearZealot);
+				unit.follow(nearZealot);
+			}
+		}
+		
+		if(unit.getType() == UnitType.Protoss_Observer ){
+			
+			CommandUtil commandUtil = new CommandUtil();
+			
+			//옵저버가 탄생하면 자신의 가장 가까운 질럿을 따라다니도록 한다. 
+			Unit nearZealot = commandUtil.GetClosestUnitTypeToTarget(UnitType.Protoss_Zealot, unit.getPosition());
+			if(nearZealot != null){
+				//commandUtil.move(unit, nearZealot.getPosition());
+				unit.follow(nearZealot);
+			}else{
+				nearZealot = commandUtil.GetClosestUnitTypeToTarget(UnitType.Protoss_Dragoon, unit.getPosition());
+				//commandUtil.move(unit, nearZealot.getPosition());
+				unit.follow(nearZealot);
+			}
+			
+			//commandUtil.move(unit, nearZealot.getPosition());
+		}
+		
+		
+	
 		// ResourceDepot 및 Worker 에 대한 처리
 		WorkerManager.Instance().onUnitComplete(unit);
 	}
@@ -168,6 +201,7 @@ public class GameCommander {
 	/// 아군 유닛이 Create 되었을 때 라든가, 적군 유닛이 Discover 되었을 때 발생합니다
 	public void onUnitShow(Unit unit) { 
 		InformationManager.Instance().onUnitShow(unit); 
+		
 		
 		// ResourceDepot 및 Worker 에 대한 처리
 		//WorkerManager.Instance().onUnitShow(unit);
